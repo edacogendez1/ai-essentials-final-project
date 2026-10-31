@@ -102,13 +102,44 @@ st.caption(
 )
 
 
-
 # ----------------------------------------
 # LIVE JOB SEARCH SECTION
 # ----------------------------------------
 
 import pandas as pd
 from collect_jobs import collect_all_jobs
+
+
+# Company website domains used to retrieve logos
+COMPANY_DOMAINS = {
+    "Stripe": "stripe.com",
+    "Palantir": "palantir.com",
+    "Datadog": "datadoghq.com",
+    "Airbnb": "airbnb.com",
+    "Robinhood": "robinhood.com",
+    "Affirm": "affirm.com",
+    "DoorDash": "doordash.com",
+    "Duolingo - University Recruitment": "duolingo.com",
+    "IDEO": "ideo.com",
+    "fairlife": "fairlife.com",
+    "Figure AI": "figure.ai",
+    "Figure": "figure.com",
+    "FourKites": "fourkites.com",
+    "CAI": "cagents.com",
+    "Allegiant Air": "allegiantair.com"
+}
+
+
+def get_company_logo(company):
+    domain = COMPANY_DOMAINS.get(company)
+
+    if domain:
+        return (
+            f"https://www.google.com/s2/favicons"
+            f"?domain={domain}&sz=128"
+        )
+
+    return None
 
 # Cache API results for 6 hours (21,600 seconds).
 # Multiple users can share cached results on the same server.
@@ -202,23 +233,42 @@ try:
         )
 
         # Display first 20 matching jobs
+       
+        # Display first 20 matching jobs
         for _, job in filtered_jobs.head(20).iterrows():
             with st.container(border=True):
-                st.subheader(job["job_title"])
-                st.write(f"**Company:** {job['company']}")
-                st.write(f"**Location:** {job['location']}")
+
+                logo_col, info_col = st.columns(
+                    [1, 9],
+                    gap="medium",
+                    vertical_alignment="center"
+                )
+
+                with logo_col:
+                    logo_url = get_company_logo(job["company"])
+
+                    if logo_url:
+                        st.image(logo_url, width=64)
+                    else:
+                        st.write("🏢")
+
+                with info_col:
+                    st.subheader(job["job_title"])
+                    st.write(f"**Company:** {job['company']}")
+                    st.write(f"**Location:** {job['location']}")
 
                 with st.expander("View Job Description"):
                     st.write(job["description"])
 
                 if str(job["job_url"]).startswith(
-    ("https://", "http://")
-):
+                    ("https://", "http://")
+                ):
                     st.link_button(
                         "Apply on Company Website ↗",
                         job["job_url"],
                         type="primary"
-    )
+                    )
+
 
 except Exception as error:
     st.error("Unable to load job postings at the moment.")
