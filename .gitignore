@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Collected third-party job posting data
+jobs.csv
+
+# Uploaded resumes and personal information
+resumes/
+uploads/
