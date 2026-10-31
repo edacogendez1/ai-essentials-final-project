@@ -7,6 +7,24 @@ from html import unescape
 from pathlib import Path
 from datetime import datetime, timezone
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+session = requests.Session()
+
+retries = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET"],
+    respect_retry_after_header=True
+)
+
+session.mount(
+    "https://",
+    HTTPAdapter(max_retries=retries)
+)
+
 BASE_DIR = Path(__file__).parent
 
 
@@ -53,7 +71,7 @@ def get_lever_jobs(company, board_id):
     skip = 0
 
     for page in range(100):
-        response = requests.get(
+        response = session.get(
             url,
             params={
                 "mode": "json",

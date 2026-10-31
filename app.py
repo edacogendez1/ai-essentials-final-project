@@ -131,6 +131,10 @@ try:
             "Results may be incomplete."
         )
 
+        with st.expander("View API errors"):
+            for error in collection_errors:
+                st.write(error)
+
     if jobs_df.empty:
         st.info("No jobs could be retrieved right now.")
 
@@ -208,12 +212,13 @@ try:
                     st.write(job["description"])
 
                 if str(job["job_url"]).startswith(
-                    ("https://", "http://")
-                ):
+    ("https://", "http://")
+):
                     st.link_button(
-                        "View Original Posting",
-                        job["job_url"]
-                    )
+                        "Apply on Company Website ↗",
+                        job["job_url"],
+                        type="primary"
+    )
 
 except Exception as error:
     st.error("Unable to load job postings at the moment.")
