@@ -102,89 +102,120 @@ st.caption(
 )
 
 
+
 # ----------------------------------------
-# JOB SEARCH SECTION
+# LIVE JOB SEARCH SECTION
 # ----------------------------------------
 
 import pandas as pd
-from pathlib import Path
+from collect_jobs import collect_all_jobs
+
+# Cache API results for 6 hours (21,600 seconds).
+# Multiple users can share cached results on the same server.
+@st.cache_data(ttl=21600, show_spinner=False)
+def load_live_jobs():
+    jobs, errors = collect_all_jobs()
+    return pd.DataFrame(jobs), errors
+
 
 st.divider()
 st.header("🔎 Explore Job Opportunities")
 
-jobs_path = Path(__file__).parent / "jobs.csv"
+try:
+    with st.spinner("Loading job opportunities..."):
+        jobs_df, collection_errors = load_live_jobs()
 
-if jobs_path.exists():
-    jobs_df = pd.read_csv(jobs_path).fillna("")
+    if collection_errors:
+        st.warning(
+            "Some employer job boards could not be retrieved. "
+            "Results may be incomplete."
+        )
 
-    st.write(f"Explore {len(jobs_df):,} job opportunities!")
+    if jobs_df.empty:
+        st.info("No jobs could be retrieved right now.")
 
-    # Company filter
-    companies = ["All Companies"] + sorted(
-        jobs_df["company"].unique().tolist()
-    )
+    else:
+        jobs_df = jobs_df.fillna("")
 
-    selected_company = st.selectbox(
-        "Select a company",
-        companies
-    )
+        st.write(
+            f"Explore {len(jobs_df):,} job opportunities "
+            "retrieved from employer job boards."
+        )
 
-       # Location filter
-    location_search = st.text_input(
-        "Preferred job location",
-        placeholder="e.g., Chicago, New York, Remote",
-        key="job_search_location"
-    )
+        # Company filter
+        companies = ["All Companies"] + sorted(
+            jobs_df["company"].unique().tolist()
+        )
 
-    # Job title filter
-    keyword_search = st.text_input(
-        "Job title or keyword",
-        placeholder="e.g., Analyst, Finance, Data Scientist",
-        key="job_search_keyword"
-    )
+        selected_company = st.selectbox(
+            "Select a company",
+            companies,
+            key="job_search_company"
+        )
 
-    # Apply filters
-    filtered_jobs = jobs_df.copy()
+        # Location filter
+        location_search = st.text_input(
+            "Preferred job location",
+            placeholder="e.g., Chicago, New York, Remote",
+            key="job_search_location"
+        )
 
-    if selected_company != "All Companies":
-        filtered_jobs = filtered_jobs[
-            filtered_jobs["company"] == selected_company
-        ]
+        # Job title filter
+        keyword_search = st.text_input(
+            "Job title or keyword",
+            placeholder="e.g., Analyst, Finance, Data Scientist",
+            key="job_search_keyword"
+        )
 
-    if location_search:
-        filtered_jobs = filtered_jobs[
-            filtered_jobs["location"].str.contains(
-                location_search, case=False, regex=False
-            )
-        ]
+        # Apply filters
+        filtered_jobs = jobs_df.copy()
 
-    if keyword_search:
-        filtered_jobs = filtered_jobs[
-            filtered_jobs["job_title"].str.contains(
-                keyword_search, case=False, regex=False
-            )
-        ]
+        if selected_company != "All Companies":
+            filtered_jobs = filtered_jobs[
+                filtered_jobs["company"] == selected_company
+            ]
 
-    st.write(f"**{len(filtered_jobs)} matching jobs found**")
-
-    # Display the first 20 matching results
-    for _, job in filtered_jobs.head(20).iterrows():
-        with st.container(border=True):
-            st.subheader(job["job_title"])
-            st.write(f"**Company:** {job['company']}")
-            st.write(f"**Location:** {job['location']}")
-
-            with st.expander("View Job Description"):
-                st.write(job["description"])
-
-            if str(job["job_url"]).startswith("https://"):
-                st.link_button(
-                    "View Original Posting",
-                    job["job_url"]
+        if location_search:
+            filtered_jobs = filtered_jobs[
+                filtered_jobs["location"].str.contains(
+                    location_search,
+                    case=False,
+                    regex=False
                 )
+            ]
 
-else:
-    st.info(
-        "Job database not found. "
-        "Run collect_jobs.py locally to generate jobs.csv."
-    )
+        if keyword_search:
+            filtered_jobs = filtered_jobs[
+                filtered_jobs["job_title"].str.contains(
+                    keyword_search,
+                    case=False,
+                    regex=False
+                )
+            ]
+
+        st.write(
+            f"**{len(filtered_jobs):,} matching jobs found**"
+        )
+
+        # Display first 20 matching jobs
+        for _, job in filtered_jobs.head(20).iterrows():
+            with st.container(border=True):
+                st.subheader(job["job_title"])
+                st.write(f"**Company:** {job['company']}")
+                st.write(f"**Location:** {job['location']}")
+
+                with st.expander("View Job Description"):
+                    st.write(job["description"])
+
+                if str(job["job_url"]).startswith(
+                    ("https://", "http://")
+                ):
+                    st.link_button(
+                        "View Original Posting",
+                        job["job_url"]
+                    )
+
+except Exception as error:
+    st.error("Unable to load job postings at the moment.")
+    st.exception(error)
+
