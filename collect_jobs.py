@@ -40,11 +40,11 @@ def get_greenhouse_jobs(company, board_id):
         f"{board_id}/jobs"
     )
 
-    response = requests.get(
-        url,
-        params={"content": "true"},
-        timeout=60
-    )
+    response = session.get(
+    url,
+    params={"content": "true"},
+    timeout=60
+)
     response.raise_for_status()
 
     jobs = []
