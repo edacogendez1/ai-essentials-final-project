@@ -225,3 +225,6 @@ jobs.csv
 # Uploaded resumes and personal information
 resumes/
 uploads/
+
+# Resume research datasets and personal data
+data/

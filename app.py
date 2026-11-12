@@ -5,6 +5,11 @@ from datetime import datetime, timezone
 
 from collect_jobs import collect_all_jobs
 
+from classify_jobs import (
+    classify_employment_type_with_description,
+    classify_seniority_with_description
+)
+
 # ----------------------------------------
 # PAGE CONFIGURATION
 # ----------------------------------------
@@ -184,26 +189,6 @@ def get_company_logo(company):
 
 
 # ----------------------------------------
-# EMPLOYMENT TYPE
-# ----------------------------------------
-
-def classify_employment_type(title):
-    title = str(title).lower()
-
-    if "intern" in title:
-        return "Internship"
-
-    elif "part-time" in title or "part time" in title:
-        return "Part-time"
-
-    elif "contract" in title or "temporary" in title:
-        return "Contract"
-
-    else:
-        return "Full-time"
-
-
-# ----------------------------------------
 # LIVE JOB DATA
 # ----------------------------------------
 
@@ -269,11 +254,28 @@ with explore_tab:
         if jobs_df.empty:
             st.info("No job postings are available right now.")
 
+        
         else:
             jobs_df = jobs_df.fillna("")
-            jobs_df["employment_type"] = (
-                jobs_df["job_title"].apply(classify_employment_type)
-            )
+
+            # Classify employment type using title and description
+            jobs_df["employment_type"] = [
+                classify_employment_type_with_description(title, description)
+                for title, description in zip(
+                    jobs_df["job_title"],
+                    jobs_df["description"]
+                )
+            ]
+
+            # Classify seniority using title and description
+            jobs_df["seniority_level"] = [
+                classify_seniority_with_description(title, description)
+                for title, description in zip(
+                    jobs_df["job_title"],
+                    jobs_df["description"]
+                )
+            ]
+
 
             st.caption(
                 f"{len(jobs_df):,} available jobs across "
@@ -321,6 +323,21 @@ with explore_tab:
                         key="job_search_employment"
                     )
 
+                    selected_seniority = st.selectbox(
+                        "Seniority Level (estimated)",
+                        [
+                            "All Levels",
+                            "Intern",
+                            "Entry-level",
+                            "Mid-level",
+                            "Senior",
+                            "Manager",
+                            "Director/Executive",
+                            "Level not specified"
+                        ],
+                        key="job_search_seniority"
+                    )
+
                     location_search = st.text_input(
                         "Location",
                         placeholder="Any location",
@@ -349,6 +366,19 @@ with explore_tab:
                     filtered_jobs["employment_type"]
                     == selected_employment
                 ]
+
+            if selected_seniority != "All Levels":
+                seniority_value = (
+                    "Unknown"
+                    if selected_seniority == "Level not specified"
+                    else selected_seniority
+                )
+
+                filtered_jobs = filtered_jobs[
+                    filtered_jobs["seniority_level"]
+                    == seniority_value
+                ]
+
 
             if location_search:
                 filtered_jobs = filtered_jobs[
@@ -431,12 +461,17 @@ with explore_tab:
                                 f"{job['location']}"
                             )
 
+                            
                             st.markdown(
                                 f'<span class="pill">'
                                 f'{job["employment_type"]}'
+                                f'</span> '
+                                f'<span class="pill">'
+                                f'{job["seniority_level"] if job["seniority_level"] != "Unknown" else "Level not specified"}'
                                 f'</span>',
                                 unsafe_allow_html=True
                             )
+
 
                         # Actions below the job details
                         description_col, apply_col = st.columns(
