@@ -165,7 +165,7 @@ def collect_all_jobs():
         companies = list(csv.DictReader(file))
 
     # Collect from 5 companies simultaneously
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         future_to_company = {
             executor.submit(collect_company_jobs, info): info["company"]
             for info in companies
