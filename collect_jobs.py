@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-session = requests.Session()
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 retries = Retry(
     total=3,
@@ -20,10 +21,18 @@ retries = Retry(
     respect_retry_after_header=True
 )
 
-session.mount(
-    "https://",
-    HTTPAdapter(max_retries=retries)
-)
+_thread_local = threading.local()
+
+def get_session():
+    if not hasattr(_thread_local, "session"):
+        session = requests.Session()
+        session.mount(
+            "https://",
+            HTTPAdapter(max_retries=retries)
+        )
+        _thread_local.session = session
+
+    return _thread_local.session
 
 BASE_DIR = Path(__file__).parent
 
@@ -40,11 +49,11 @@ def get_greenhouse_jobs(company, board_id):
         f"{board_id}/jobs"
     )
 
-    response = session.get(
-    url,
-    params={"content": "true"},
-    timeout=60
-)
+    response = get_session().get(
+        url,
+        params={"content": "true"},
+        timeout=60
+    )
     response.raise_for_status()
 
     jobs = []
@@ -71,7 +80,7 @@ def get_lever_jobs(company, board_id):
     skip = 0
 
     for page in range(100):
-        response = session.get(
+        response = get_session().get(
             url,
             params={
                 "mode": "json",
@@ -122,6 +131,28 @@ def get_lever_jobs(company, board_id):
     return jobs
 
 
+def collect_company_jobs(company_info):
+    company = company_info["company"]
+    ats = company_info["ats"].strip().lower()
+    board_id = company_info["board_id"].strip()
+
+    if ats == "greenhouse":
+        jobs = get_greenhouse_jobs(company, board_id)
+
+    elif ats == "lever":
+        jobs = get_lever_jobs(company, board_id)
+
+    else:
+        raise ValueError(f"Unsupported ATS: {ats}")
+
+    checked_at = datetime.now(timezone.utc).isoformat()
+
+    for job in jobs:
+        job["last_checked"] = checked_at
+
+    return jobs
+
+
 def collect_all_jobs():
     all_jobs = []
     errors = []
@@ -133,33 +164,25 @@ def collect_all_jobs():
     ) as file:
         companies = list(csv.DictReader(file))
 
-    for company_info in companies:
-        company = company_info["company"]
-        ats = company_info["ats"].strip().lower()
-        board_id = company_info["board_id"].strip()
+    # Collect from 5 companies simultaneously
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_company = {
+            executor.submit(collect_company_jobs, info): info["company"]
+            for info in companies
+        }
 
-        try:
-            if ats == "greenhouse":
-                jobs = get_greenhouse_jobs(company, board_id)
+        for future in as_completed(future_to_company):
+            company = future_to_company[future]
 
-            elif ats == "lever":
-                jobs = get_lever_jobs(company, board_id)
+            try:
+                jobs = future.result()
+                all_jobs.extend(jobs)
+                print(f"{company}: collected {len(jobs)} jobs")
 
-            else:
-                raise ValueError(f"Unsupported ATS: {ats}")
-
-            checked_at = datetime.now(timezone.utc).isoformat()
-
-            for job in jobs:
-                job["last_checked"] = checked_at
-
-            all_jobs.extend(jobs)
-            print(f"{company}: collected {len(jobs)} jobs")
-
-        except (requests.exceptions.RequestException,
-                ValueError, RuntimeError) as error:
-            errors.append(f"{company}: {error}")
-            print(f"Collection error — {company}: {error}")
+            except (requests.exceptions.RequestException,
+                    ValueError, RuntimeError) as error:
+                errors.append(f"{company}: {error}")
+                print(f"Collection error — {company}: {error}")
 
     # Remove duplicate job IDs
     unique_jobs = {}
@@ -169,6 +192,8 @@ def collect_all_jobs():
         unique_jobs[key] = job
 
     return list(unique_jobs.values()), errors
+
+
 
 
 # Only write jobs.csv when this script is run directly.

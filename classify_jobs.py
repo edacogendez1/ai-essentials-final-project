@@ -151,6 +151,124 @@ def classify_seniority_with_description(title, description):
     # Don't assume entry-level without evidence
     return "Unknown"
 
+
+def classify_job_categories(title, description=""):
+    title = str(title).lower()
+
+    category_keywords = {
+        "Finance": [
+            "financial analyst", "finance", "treasury",
+            "corporate finance", "underwriting", "credit analyst"
+        ],
+        "Accounting": [
+            "accountant", "accounting", "audit", "tax"
+        ],
+        "Investment Banking": [
+            "investment banking", "m&a analyst",
+            "mergers and acquisitions"
+        ],
+        "Asset Management": [
+            "asset management", "portfolio manager",
+            "investment management"
+        ],
+        "Consulting": [
+            "consultant", "consulting"
+        ],
+        "Strategy": [
+            "strategy", "strategist", "strategic planning"
+        ],
+        "Economics": [
+            "economist", "economic analyst",
+            "economics"
+        ],
+        "Research": [
+            "research", "research assistant",
+            "research analyst"
+        ],
+         "Software Engineering": [
+            "software engineer", "software developer",
+            "backend engineer", "frontend engineer",
+            "front end engineer", "front-end engineer",
+            "full stack engineer", "full-stack engineer",
+            "principal engineer", "engineering manager"
+        ],
+
+        "Artificial Intelligence & Machine Learning": [
+             "machine learning", "ai engineer",
+             "artificial intelligence", "applied ai",
+             "ai architect", "llm engineer"
+        ],
+        "Data Science": [
+            "data scientist", "data science"
+        ],
+        "Data Analytics": [
+            "data analyst", "business intelligence",
+            "analytics"
+        ],
+        "Cybersecurity": [
+            "cybersecurity", "security engineer",
+            "information security"
+        ],
+        "Information Technology": [
+            "it support", "systems administrator",
+            "information technology",
+            "technical support engineer", "it specialist"
+        ],
+        "Marketing": [
+            "marketing", "brand manager",
+            "growth marketing"
+        ],
+        "Sales": [
+            "sales", "account executive",
+            "sales representative"
+        ],
+        "Business Development": [
+            "business development", "partnerships"
+        ],
+        "Operations": [
+            "operations", "operational excellence"
+        ],
+        "Supply Chain & Logistics": [
+            "supply chain", "logistics", "procurement"
+        ],
+        "Human Resources": [
+            "human resources", "recruiter",
+            "talent acquisition"
+        ],
+        "Healthcare": [
+            "clinical", "healthcare", "medical"
+        ],
+        "Legal & Compliance": [
+            "legal", "compliance", "attorney"
+        ],
+        "Design": [
+            "designer", "ux design", "product design"
+        ],
+        "Communications & Public Relations": [
+            "public relations", "communications",
+            "press relations"
+        ]
+    }
+
+
+    import re
+
+    # First, classify using the job title
+    title_categories = []
+
+    for category, keywords in category_keywords.items():
+        for keyword in keywords:
+            pattern = r"\b" + re.escape(keyword) + r"\b"
+
+            if re.search(pattern, title):
+                title_categories.append(category)
+                break
+
+   
+    # Use title-based categories for now
+    return title_categories if title_categories else ["Uncategorized"]
+
+
 # Test our classifier on example titles
 if __name__ == "__main__":
 
@@ -214,3 +332,9 @@ if __name__ == "__main__":
         )
         print(f"{title}: {employment_type}")
 
+    print("\nJOB CATEGORY CLASSIFICATION TESTS")
+
+    print(classify_job_categories("Investment Banking Analyst"))
+    print(classify_job_categories("Machine Learning Engineer"))
+    print(classify_job_categories("Strategy Consultant"))
+    print(classify_job_categories("Financial Analyst"))

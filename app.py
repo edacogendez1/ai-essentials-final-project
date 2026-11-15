@@ -7,8 +7,37 @@ from collect_jobs import collect_all_jobs
 
 from classify_jobs import (
     classify_employment_type_with_description,
-    classify_seniority_with_description
+    classify_seniority_with_description,
+    classify_job_categories
 )
+
+from io import BytesIO
+from pypdf import PdfReader
+from docx import Document
+
+
+def extract_resume_text(uploaded_file):
+    file_bytes = uploaded_file.getvalue()
+
+    if uploaded_file.name.lower().endswith(".pdf"):
+        reader = PdfReader(BytesIO(file_bytes))
+        text = "\n".join(
+            page.extract_text() or ""
+            for page in reader.pages
+        )
+
+    elif uploaded_file.name.lower().endswith(".docx"):
+        document = Document(BytesIO(file_bytes))
+        text = "\n".join(
+            paragraph.text
+            for paragraph in document.paragraphs
+        )
+
+    else:
+        return ""
+
+    return text.strip()
+
 
 # ----------------------------------------
 # PAGE CONFIGURATION
@@ -172,7 +201,99 @@ COMPANY_DOMAINS = {
     "Figure": "figure.com",
     "FourKites": "fourkites.com",
     "CAI": "cagents.com",
-    "Allegiant Air": "allegiantair.com"
+    "Allegiant Air": "allegiantair.com",
+    "Adyen": "adyen.com",
+    "Beyond Finance": "beyondfinance.com",
+    "Supporting Strategies": "supportingstrategies.com",
+    "American Institutes for Research": "air.org",
+    "Reformation": "thereformation.com",
+    "FAM Brands": "fambrands.com",
+    "Twilio": "twilio.com",
+    "Anthropic": "anthropic.com",
+    "Flexport": "flexport.com",
+    "Braze": "braze.com",
+    "Extend": "paywithextend.com",
+    "Ocrolus": "ocrolus.com",
+    "Metronome": "metronome.com",
+    "The Virtus Solution": "thevirtussolution.com",
+
+    # Technology, Finance & AI
+    "Scale AI": "scale.com",
+    "Figma": "figma.com",
+    "Chime": "chime.com",
+    "Cloudflare": "cloudflare.com",
+    "Reddit": "reddit.com",
+    "Gusto": "gusto.com",
+    "Endor Labs": "endorlabs.com",
+    "Mercury": "mercury.com",
+    "Chainguard": "chainguard.dev",
+    "Vercel": "vercel.com",
+    "Snorkel AI": "snorkel.ai",
+    "Kikoff": "kikoff.com",
+    "Customer.io": "customer.io",
+    "Labelbox": "labelbox.com",
+    "MedElite Group": "medelitegrp.com",
+    "xAI": "x.ai",
+    "Veeam Software": "veeam.com",
+    "Rocket Lab": "rocketlabusa.com",
+    "PlayStation Global": "playstation.com",
+    "The Specialty Alliance": "thespecialtyalliance.com",
+    "SharkNinja": "sharkninja.com",
+    "GitLab": "gitlab.com",
+    "Precision Medicine Group": "precisionmedicinegrp.com",
+    "Voyager Technologies": "voyagertechnologies.com",
+    "Praxis Precision Medicines": "praxismedicines.com",
+    "Anduril Industries": "anduril.com",
+
+    # Additional Technology & Consumer Companies
+    "Databricks": "databricks.com",
+    "Dropbox": "dropbox.com",
+    "Instacart": "instacart.com",
+    "Asana": "asana.com",
+    "Discord": "discord.com",
+    "Samsara": "samsara.com",
+    "Twitch": "twitch.tv",
+    "Pinterest": "pinterest.com",
+    "MongoDB": "mongodb.com",
+    "Elastic": "elastic.co",
+    "Peloton": "onepeloton.com",
+    "SoFi": "sofi.com",
+    "Betterment": "betterment.com",
+    "Airtable": "airtable.com",
+    "Faire": "faire.com",
+
+    # Final 30 Companies
+    "SpaceX": "spacex.com",
+    "Carvana": "carvana.com",
+    "EquipmentShare": "equipmentshare.com",
+    "WPP Media": "wppmedia.com",
+    "Capco": "capco.com",
+    "Accenture Federal Services": "accenture.com",
+    "Coinbase": "coinbase.com",
+    "Brex": "brex.com",
+    "Axon": "axon.com",
+    "Esri": "esri.com",
+    "Lucid Motors": "lucidmotors.com",
+    "HelloFresh": "hellofresh.com",
+    "Okta": "okta.com",
+    "Zscaler": "zscaler.com",
+    "Nebius": "nebius.com",
+    "Waymo": "waymo.com",
+    "Toast": "toasttab.com",
+    "CoreWeave": "coreweave.com",
+    "Verkada": "verkada.com",
+    "Relativity Space": "relativityspace.com",
+    "Zipline": "flyzipline.com",
+    "Monks": "monks.com",
+    "One Medical": "onemedical.com",
+    "Agoda": "agoda.com",
+    "Canonical": "canonical.com",
+    "Roblox": "roblox.com",
+    "SentinelOne": "sentinelone.com",
+    "Coupang": "coupang.com",
+    "SumUp": "sumup.com",
+    "Langan Engineering": "langan.com",
+
 }
 
 
@@ -201,6 +322,38 @@ def load_live_jobs():
 
 
 # ----------------------------------------
+# CACHED JOB CLASSIFICATION
+# ----------------------------------------
+
+@st.cache_data(show_spinner="Classifying job opportunities...")
+def classify_all_jobs(jobs_df):
+
+    jobs_df = jobs_df.copy().fillna("")
+
+    jobs_df["employment_type"] = [
+        classify_employment_type_with_description(title, description)
+        for title, description in zip(
+            jobs_df["job_title"], jobs_df["description"]
+        )
+    ]
+
+    jobs_df["seniority_level"] = [
+        classify_seniority_with_description(title, description)
+        for title, description in zip(
+            jobs_df["job_title"], jobs_df["description"]
+        )
+    ]
+
+    jobs_df["job_categories"] = [
+        classify_job_categories(title, description)
+        for title, description in zip(
+            jobs_df["job_title"], jobs_df["description"]
+        )
+    ]
+
+    return jobs_df
+
+# ----------------------------------------
 # HOMEPAGE HEADER
 # ----------------------------------------
 
@@ -216,22 +369,16 @@ st.caption("AI Job Search Assistant | Eda & Yuvraj")
 
 st.divider()
 
-
 # ----------------------------------------
 # MAIN NAVIGATION
 # ----------------------------------------
 
-explore_tab, matches_tab, profile_tab = st.tabs([
-    "Explore Jobs",
-    "AI Matches",
-    "My Profile"
-])
-
-
+explore_tab, profile_tab, matches_tab = st.tabs(
+    ["Explore Jobs", "My Profile", "AI Matches"]
+)
 # ========================================
 # TAB 1 — EXPLORE JOBS
 # ========================================
-
 
 with explore_tab:
 
@@ -256,26 +403,7 @@ with explore_tab:
 
         
         else:
-            jobs_df = jobs_df.fillna("")
-
-            # Classify employment type using title and description
-            jobs_df["employment_type"] = [
-                classify_employment_type_with_description(title, description)
-                for title, description in zip(
-                    jobs_df["job_title"],
-                    jobs_df["description"]
-                )
-            ]
-
-            # Classify seniority using title and description
-            jobs_df["seniority_level"] = [
-                classify_seniority_with_description(title, description)
-                for title, description in zip(
-                    jobs_df["job_title"],
-                    jobs_df["description"]
-                )
-            ]
-
+            jobs_df = classify_all_jobs(jobs_df)
 
             st.caption(
                 f"{len(jobs_df):,} available jobs across "
@@ -309,6 +437,39 @@ with explore_tab:
                         "Company",
                         companies,
                         key="job_search_company"
+                    )
+
+                    selected_category = st.selectbox(
+                        "Job Category (estimated)",
+                        [
+                            "All Categories",
+                            "Finance",
+                            "Accounting",
+                            "Investment Banking",
+                            "Asset Management",
+                            "Consulting",
+                            "Strategy",
+                            "Economics",
+                            "Research",
+                            "Software Engineering",
+                            "Artificial Intelligence & Machine Learning",
+                            "Data Science",
+                            "Data Analytics",
+                            "Cybersecurity",
+                            "Information Technology",
+                            "Marketing",
+                            "Sales",
+                            "Business Development",
+                            "Operations",
+                            "Supply Chain & Logistics",
+                            "Human Resources",
+                            "Healthcare",
+                            "Legal & Compliance",
+                            "Design",
+                            "Communications & Public Relations",
+                            "Uncategorized"
+                        ],
+                        key="job_search_category"
                     )
 
                     selected_employment = st.selectbox(
@@ -359,6 +520,14 @@ with explore_tab:
             if selected_company != "All Companies":
                 filtered_jobs = filtered_jobs[
                     filtered_jobs["company"] == selected_company
+                ]
+
+            # Filter by job category
+            if selected_category != "All Categories":
+                filtered_jobs = filtered_jobs[
+                    filtered_jobs["job_categories"].apply(
+                        lambda categories: selected_category in categories
+                    )
                 ]
 
             if selected_employment != "All Types":
@@ -432,8 +601,76 @@ with explore_tab:
                         "Try broadening your search."
                     )
 
+
+                # Reset pagination when search filters change
+                current_filters = (
+                    selected_company,
+                    selected_category,
+                    selected_employment,
+                    selected_seniority,
+                    location_search,
+                    keyword_search
+                )
+
+                if st.session_state.get("previous_job_filters") != current_filters:
+                    st.session_state.job_results_page = 1
+                    st.session_state.previous_job_filters = current_filters
+
+
+                # Pagination
+                jobs_per_page = 20
+
+                total_pages = max(
+                    1,
+                    (len(filtered_jobs) + jobs_per_page - 1)
+                    // jobs_per_page
+                )
+
+                # Keep the selected page within the available range
+                if "job_results_page" not in st.session_state:
+                    st.session_state.job_results_page = 1
+
+                st.session_state.job_results_page = min(
+                    st.session_state.job_results_page,
+                    total_pages
+                )
+
+                previous_col, page_col, next_col = st.columns([1, 2, 1])
+
+                with previous_col:
+                    if st.button(
+                        "← Previous",
+                        disabled=st.session_state.job_results_page == 1
+                    ):
+                        st.session_state.job_results_page -= 1
+                        st.rerun()
+
+                with page_col:
+                    st.markdown(
+                        f"**Page {st.session_state.job_results_page} "
+                        f"of {total_pages}**"
+                    )
+
+                with next_col:
+                    if st.button(
+                        "Next →",
+                        disabled=st.session_state.job_results_page == total_pages
+                    ):
+                        st.session_state.job_results_page += 1
+                        st.rerun()
+
+                page = st.session_state.job_results_page
+
+                start_index = (page - 1) * jobs_per_page
+                end_index = start_index + jobs_per_page
+
+                page_jobs = filtered_jobs.iloc[
+                    start_index:end_index
+                ]
+
+
                 # Compact job cards
-                for _, job in filtered_jobs.head(20).iterrows():
+                for _, job in page_jobs.iterrows():
 
                     with st.container(border=True):
 
@@ -462,15 +699,24 @@ with explore_tab:
                             )
 
                             
-                            st.markdown(
-                                f'<span class="pill">'
-                                f'{job["employment_type"]}'
-                                f'</span> '
+                            # Display employment type and seniority
+                            badges = (
+                                f'<span class="pill">{job["employment_type"]}</span> '
                                 f'<span class="pill">'
                                 f'{job["seniority_level"] if job["seniority_level"] != "Unknown" else "Level not specified"}'
-                                f'</span>',
+                                f'</span> '
+                            )
+
+                            # Add job category badges
+                            for category in job["job_categories"]:
+                                if category != "Uncategorized":
+                                    badges += f'<span class="pill">{category}</span> '
+
+                            st.markdown(
+                                badges,
                                 unsafe_allow_html=True
                             )
+
 
 
                         # Actions below the job details
@@ -493,12 +739,6 @@ with explore_tab:
                                     type="primary"
                                 )
 
-                if len(filtered_jobs) > 20:
-                    st.caption(
-                        "Showing the first 20 matching jobs. "
-                        "Pagination will be added next."
-                    )
-
     except Exception as error:
         st.error("Unable to load job postings.")
         st.exception(error)
@@ -510,6 +750,17 @@ with explore_tab:
 with matches_tab:
 
     st.header("Personalized Job Recommendations")
+
+    # Check whether a resume has been uploaded
+    resume_text = st.session_state.get("resume_text", "")
+
+    if resume_text:
+        st.success("Your resume is ready for AI matching.")
+    else:
+        st.warning(
+            "Please upload your resume in My Profile "
+            "before generating recommendations."
+        )
 
     st.write(
         "Our recommendation system will analyze your "
@@ -564,26 +815,78 @@ with profile_tab:
         key="profile_resume"
     )
 
+    
     if uploaded_resume is not None:
-        st.success("Resume uploaded for this session.")
+        try:
+            resume_text = extract_resume_text(uploaded_resume)
+
+            
+            if resume_text:
+                is_new_resume = (
+                    st.session_state.get("resume_text") != resume_text
+                )
+
+                st.session_state["resume_text"] = resume_text
+
+                if is_new_resume:
+                    st.rerun()
+
+                st.success("Resume uploaded and text extracted successfully.")
+                st.caption(f"Extracted {len(resume_text):,} characters.")
+            else:
+                st.session_state.pop("resume_text", None)
+                st.warning(
+                    "We couldn't extract readable text from this resume."
+                )
+
+        except Exception:
+            st.session_state.pop("resume_text", None)
+            st.error(
+                "We couldn't read this file. Please upload a valid PDF or DOCX."
+            )
+    else:
+        st.session_state.pop("resume_text", None)
+
 
     st.divider()
 
     st.subheader("Career Preferences")
 
-    preferred_industry = st.selectbox(
-        "Preferred Industry",
+    
+    preferred_categories = st.multiselect(
+        "Preferred Job Categories",
         [
-            "Select an industry",
             "Finance",
+            "Accounting",
+            "Investment Banking",
+            "Asset Management",
             "Consulting",
-            "Technology",
+            "Strategy",
+            "Economics",
+            "Research",
+            "Software Engineering",
+            "Artificial Intelligence & Machine Learning",
+            "Data Science",
+            "Data Analytics",
+            "Cybersecurity",
+            "Information Technology",
             "Marketing",
+            "Sales",
+            "Business Development",
+            "Operations",
+            "Supply Chain & Logistics",
+            "Human Resources",
             "Healthcare",
-            "Other"
+            "Legal & Compliance",
+            "Design",
+            "Communications & Public Relations"
         ],
-        key="profile_industry"
+        placeholder="Select your career interests",
+        help="Select multiple categories to personalize your job recommendations.",
+        key="profile_categories"
     )
+
+
 
     preferred_location = st.text_input(
         "Preferred Location",
@@ -600,6 +903,20 @@ with profile_tab:
             "Contract"
         ],
         key="profile_employment"
+    )
+
+    preferred_seniority = st.selectbox(
+        "Preferred Seniority Level",
+        [
+            "All Levels",
+            "Intern",
+            "Entry-level",
+            "Mid-level",
+            "Senior",
+            "Manager",
+            "Director/Executive"
+        ],
+        key="profile_seniority"
     )
 
     st.info(

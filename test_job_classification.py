@@ -2,9 +2,11 @@
 import random
 
 from collect_jobs import collect_all_jobs
+
 from classify_jobs import (
     classify_employment_type_with_description,
-    classify_seniority_with_description
+    classify_seniority_with_description,
+    classify_job_categories
 )
 
 # Collect real jobs
@@ -29,8 +31,10 @@ for job in sample_jobs:
     seniority = classify_seniority_with_description(
         title, description
     )
+    categories = classify_job_categories(title, description)
 
     print(f"\nJob: {title}")
     print(f"Company: {job['company']}")
     print(f"Employment type: {employment_type}")
     print(f"Seniority: {seniority}")
+    print(f"Categories: {', '.join(categories)}")
