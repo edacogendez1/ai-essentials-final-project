@@ -386,6 +386,9 @@ with explore_tab:
     st.caption("Find positions aligned with your career goals.")
 
     try:
+        st.warning("Diagnostic test: job collection temporarily disabled.")
+        st.stop()
+
         with st.spinner("Loading job opportunities..."):
             jobs_df, collection_errors, last_updated = load_live_jobs()
 
