@@ -149,7 +149,7 @@ def calculate_skills_overlap(resume_text, job_text):
     return len(matching_skills) / len(resume_skills)
 
 
-def rank_job_matches(resume_text, candidates, top_n=10):
+def rank_job_matches(resume_text, candidates, top_n=10, feedback=None):
 
     if candidates.empty:
         return candidates.copy()
@@ -185,10 +185,56 @@ def rank_job_matches(resume_text, candidates, top_n=10):
         0.85 * candidates["match_score"]
         + 0.15 * candidates["skills_score"]
     )
+    # Create job identifiers matching the feedback buttons
+    candidates["feedback_key"] = (
+        candidates["ats"].astype(str)
+        + "_"
+        + candidates["company"].astype(str)
+        + "_"
+        + candidates["job_id"].astype(str)
+    )
+    # Retrieve student feedback for each job
+    feedback = feedback or {}
+
+    candidates["feedback_rating"] = (
+            candidates["feedback_key"]
+            .map(feedback)
+            .fillna(0)
+            .astype(int)
+        )
+    # Calculate similarity to previously rated jobs
+    candidates["feedback_score"] = 0.0
+
+    if (candidates["feedback_rating"] != 0).any():
+        model = load_matching_model()
+
+        job_embeddings = model.encode(
+            job_texts,
+            batch_size=32,
+            normalize_embeddings=True
+        )
+
+        ratings = candidates["feedback_rating"].to_numpy()
+        rated_embeddings = job_embeddings[ratings != 0]
+        rated_values = ratings[ratings != 0]
+
+        feedback_scores = (
+            job_embeddings @ rated_embeddings.T
+        ) @ rated_values / len(rated_values)
+
+        candidates["feedback_score"] = feedback_scores
+    
+    # Adjust hybrid scores based on student feedback
+    candidates["final_score"] = (
+        candidates["hybrid_score"]
+        + 0.10 * candidates["feedback_score"]
+)
+
+
 
     # Rank from highest to lowest
     candidates = candidates.sort_values(
-        by="hybrid_score",
+        by="final_score",
         ascending=False
     )
 

@@ -53,6 +53,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# Store student feedback on job recommendations
+if "job_feedback" not in st.session_state:
+    st.session_state["job_feedback"] = {}
+
 # ----------------------------------------
 # WEBSITE STYLING
 # ----------------------------------------
@@ -824,7 +828,8 @@ with matches_tab:
                 matches = rank_job_matches(
                     resume_text,
                     candidates,
-                    top_n=10
+                    top_n=10,
+                    feedback=st.session_state["job_feedback"]
                 )
 
                 # Save results across Streamlit reruns
@@ -905,17 +910,23 @@ with matches_tab:
                             f"{job['company']} | {job['location']}"
                         )
 
-                    if "hybrid_score" in job.index and "skills_score" in job.index:
+          
+                    if "final_score" in job.index:
                         st.markdown(
-                            f"**Hybrid Match Score:** {job['hybrid_score']:.3f}"
+                            f"**Personalized Match Score:** {job['final_score']:.3f}"
                         )
                         st.caption(
-                            f"Semantic Similarity: {job['match_score']:.3f} | "
-                            f"Skills Overlap: {job['skills_score']:.3f}"
+                            f"Hybrid Score: {job['hybrid_score']:.3f} | "
+                            f"Feedback Adjustment: {0.10 * job['feedback_score']:+.3f}"
                         )
                     else:
                         st.markdown(
-                            f"**AI Similarity Score:** {job['match_score']:.3f}"
+                            f"**Hybrid Match Score:** {job['hybrid_score']:.3f}"
+                        )
+
+                        st.caption(
+                            f"Semantic Similarity: {job['match_score']:.3f} | "
+                            f"Skills Overlap: {job['skills_score']:.3f}"
                         )
 
                     description_col, apply_col = st.columns(
@@ -936,6 +947,28 @@ with matches_tab:
                                 job["job_url"],
                                 type="primary"
                             )
+
+                    # Feedback buttons for each recommended job
+                    job_key = f"{job['ats']}_{job['company']}_{job['job_id']}"
+
+                    interested_col, not_interested_col = st.columns(2)
+
+                    with interested_col:
+                        if st.button("👍 Interested", key=f"like_{job_key}"):
+                            st.session_state["job_feedback"][job_key] = 1
+
+                    with not_interested_col:
+                        if st.button("👎 Not Interested", key=f"dislike_{job_key}"):
+                            st.session_state["job_feedback"][job_key] = -1
+
+                    # Show the student's current feedback
+                    saved_feedback = st.session_state["job_feedback"].get(job_key)
+
+                    if saved_feedback == 1:
+                        st.caption("✓ Marked as Interested")
+                    elif saved_feedback == -1:
+                        st.caption("✓ Marked as Not Interested")
+
 
 
 # ========================================
