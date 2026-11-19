@@ -265,7 +265,25 @@ def classify_job_categories(title, description=""):
                 break
 
    
-    # Use title-based categories for now
+     # Prevent unrelated job functions from being classified as Finance or Research
+    if re.search(
+        r"\b(general counsel|legal counsel|attorney|lawyer)\b",
+        title
+    ):
+        title_categories = [
+            category for category in title_categories
+            if category not in ["Finance", "Investment Banking", "Asset Management"]
+        ]
+
+    if re.search(
+        r"\b(research engineer|research scientist|software engineer)\b",
+        title
+    ):
+        title_categories = [
+            category for category in title_categories
+            if category != "Research"
+        ]
+
     return title_categories if title_categories else ["Uncategorized"]
 
 

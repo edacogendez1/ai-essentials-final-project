@@ -91,6 +91,64 @@ def filter_matching_candidates(
     return candidates
 
 
+# Skills used to evaluate resume-job alignment
+SKILL_KEYWORDS = [
+    "python", "sql", "r", "excel", "tableau",
+    "power bi", "financial modeling", "valuation",
+    "financial analysis", "financial reporting",
+    "investment research", "portfolio management",
+    "risk management", "due diligence", "m&a",
+    "machine learning", "data analysis",
+    "project management", "market research",
+    "accounting", "budgeting", "forecasting",
+    "quantitative trading", "algorithmic trading",
+    "financial statement analysis", "equity research",
+    "investment analysis", "industry research",
+    "mergers and acquisitions", "capital allocation",
+    "portfolio optimization", "backtesting",
+    "factor analysis", "stochastic processes",
+    "futures trading", "corporate finance",
+    "fp&a", "financial planning and analysis"
+ ]   
+
+SKILL_SYNONYMS = {
+    "m&a": "mergers and acquisitions",
+    "mergers and acquisitions": "mergers and acquisitions",
+    "fp&a": "financial planning and analysis",
+    "financial planning and analysis": "financial planning and analysis"
+}
+
+def extract_skills(text):
+    import re
+
+    text = str(text).lower()
+
+    found_skills = set()
+
+    for skill in SKILL_KEYWORDS:
+        if skill == "r":
+            pattern = r"\br\b(?!\s*&\s*d)"
+        else:
+            pattern = r"\b" + re.escape(skill) + r"\b"
+
+        if re.search(pattern, text):
+            canonical_skill = SKILL_SYNONYMS.get(skill, skill)
+            found_skills.add(canonical_skill)
+
+    return found_skills
+
+def calculate_skills_overlap(resume_text, job_text):
+    resume_skills = extract_skills(resume_text)
+    job_skills = extract_skills(job_text)
+
+    if not resume_skills:
+        return 0.0
+
+    matching_skills = resume_skills.intersection(job_skills)
+
+    return len(matching_skills) / len(resume_skills)
+
+
 def rank_job_matches(resume_text, candidates, top_n=10):
 
     if candidates.empty:
@@ -113,11 +171,40 @@ def rank_job_matches(resume_text, candidates, top_n=10):
     # Add similarity scores to the job data
     candidates["match_score"] = scores
 
+    # Match skills using the full job description
+    candidates["skills_score"] = [
+        calculate_skills_overlap(
+            resume_text,
+            str(job["description"])
+        )
+        for _, job in candidates.iterrows()
+    ]
+
+    # Combine semantic similarity and skills overlap
+    candidates["hybrid_score"] = (
+        0.85 * candidates["match_score"]
+        + 0.15 * candidates["skills_score"]
+    )
+
     # Rank from highest to lowest
     candidates = candidates.sort_values(
-        by="match_score",
+        by="hybrid_score",
         ascending=False
     )
 
-    return candidates.head(top_n)
+    # Create a unique key using company and job title
+    candidates["dedup_key"] = (
+        candidates["company"].str.strip().str.lower()
+        + "|"
+        + candidates["job_title"].str.strip().str.lower()
+    )
+
+# Keep only the highest-ranked posting for each job
+    candidates = candidates.drop_duplicates(
+        subset=["dedup_key"],
+        keep="first"
+    )
+
+# Return the top unique recommendations
+    return candidates.drop(columns=["dedup_key"]).head(top_n)
 

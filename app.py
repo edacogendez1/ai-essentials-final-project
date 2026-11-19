@@ -826,6 +826,7 @@ with matches_tab:
                     candidates,
                     top_n=10
                 )
+
                 # Save results across Streamlit reruns
                 st.session_state["ai_matches"] = matches
                 st.session_state["ai_candidate_count"] = candidate_count
@@ -856,7 +857,6 @@ with matches_tab:
         st.session_state.pop("ai_matches", None)
         st.session_state.pop("ai_candidate_count", None)
         st.session_state.pop("ai_match_preferences", None)
-
 
     # Display previously saved recommendations
     matches = st.session_state.get("ai_matches")
@@ -905,9 +905,17 @@ with matches_tab:
                             f"{job['company']} | {job['location']}"
                         )
 
+                    if "hybrid_score" in job.index and "skills_score" in job.index:
                         st.markdown(
-                            f"**AI Similarity Score:** "
-                            f"{job['match_score']:.3f}"
+                            f"**Hybrid Match Score:** {job['hybrid_score']:.3f}"
+                        )
+                        st.caption(
+                            f"Semantic Similarity: {job['match_score']:.3f} | "
+                            f"Skills Overlap: {job['skills_score']:.3f}"
+                        )
+                    else:
+                        st.markdown(
+                            f"**AI Similarity Score:** {job['match_score']:.3f}"
                         )
 
                     description_col, apply_col = st.columns(
