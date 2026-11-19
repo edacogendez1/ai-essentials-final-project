@@ -36,6 +36,7 @@ def get_session():
 
 BASE_DIR = Path(__file__).parent
 
+MAX_JOBS_PER_COMPANY = 100
 
 def clean_text(raw_text):
     return BeautifulSoup(
@@ -58,7 +59,7 @@ def get_greenhouse_jobs(company, board_id):
 
     jobs = []
 
-    for job in response.json().get("jobs", []):
+    for job in response.json().get("jobs", [])[:MAX_JOBS_PER_COMPANY]:
         jobs.append({
             "company": company,
             "ats": "greenhouse",
@@ -79,7 +80,7 @@ def get_lever_jobs(company, board_id):
     batch_size = 20
     skip = 0
 
-    for page in range(100):
+    for page in range(5):
         response = get_session().get(
             url,
             params={
@@ -124,9 +125,6 @@ def get_lever_jobs(company, board_id):
 
         skip += batch_size
         time.sleep(0.3)
-
-    else:
-        raise RuntimeError("Lever pagination safety limit reached")
 
     return jobs
 
