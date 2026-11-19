@@ -11,6 +11,11 @@ from classify_jobs import (
     classify_job_categories
 )
 
+from job_matching import (
+    filter_matching_candidates,
+    rank_job_matches
+)
+
 from io import BytesIO
 from pypdf import PdfReader
 from docx import Document
@@ -374,8 +379,11 @@ st.divider()
 # ----------------------------------------
 
 explore_tab, profile_tab, matches_tab = st.tabs(
-    ["Explore Jobs", "My Profile", "AI Matches"]
+    ["Explore Jobs", "My Profile", "AI Matches"],
+    key="main_tab",
+    on_change="rerun"
 )
+
 # ========================================
 # TAB 1 — EXPLORE JOBS
 # ========================================
@@ -744,6 +752,7 @@ with explore_tab:
         st.error("Unable to load job postings.")
         st.exception(error)
 
+
 # ========================================
 # TAB 2 — AI MATCHES
 # ========================================
@@ -752,7 +761,6 @@ with matches_tab:
 
     st.header("Personalized Job Recommendations")
 
-    # Check whether a resume has been uploaded
     resume_text = st.session_state.get("resume_text", "")
 
     if resume_text:
@@ -764,35 +772,162 @@ with matches_tab:
         )
 
     st.write(
-        "Our recommendation system will analyze your "
-        "resume and career preferences to identify "
-        "opportunities that align with your background."
+        "Our AI model compares your resume with job "
+        "descriptions and ranks opportunities based on "
+        "semantic similarity and your career preferences."
     )
 
-    st.info(
-        "AI matching is currently under development."
+    # Generate recommendations only when requested
+    if st.button(
+        "Find My Matches",
+        type="primary",
+        disabled=not bool(resume_text)
+    ):
+
+        preferred_categories = st.session_state.get(
+            "profile_categories", []
+        )
+
+        preferred_employment = st.session_state.get(
+            "profile_employment", "Full-time"
+        )
+
+        preferred_seniority = st.session_state.get(
+            "profile_seniority", "All Levels"
+        )
+
+        preferred_location = st.session_state.get(
+            "profile_location", ""
+        )
+
+        try:
+            with st.spinner("Finding your best job matches..."):
+
+                # Load live jobs using existing cache
+                jobs_df, errors, last_updated = load_live_jobs()
+
+                # Use cached job classifications
+                jobs_df = classify_all_jobs(jobs_df)
+
+                # Filter by career preferences
+                candidates = filter_matching_candidates(
+                    jobs_df=jobs_df,
+                    preferred_categories=preferred_categories,
+                    preferred_employment=preferred_employment,
+                    preferred_seniority=preferred_seniority,
+                    preferred_location=preferred_location
+                )
+
+                candidate_count = len(candidates)
+
+                # Rank remaining jobs using AI
+                matches = rank_job_matches(
+                    resume_text,
+                    candidates,
+                    top_n=10
+                )
+                # Save results across Streamlit reruns
+                st.session_state["ai_matches"] = matches
+                st.session_state["ai_candidate_count"] = candidate_count
+                st.session_state["ai_match_preferences"] = (
+                    tuple(preferred_categories),
+                    preferred_employment,
+                    preferred_seniority,
+                    preferred_location
+)
+
+        
+        except Exception as error:
+            st.error("Unable to generate job recommendations.")
+            st.exception(error)
+
+
+    # Clear recommendations if career preferences change
+    current_preferences = (
+        tuple(st.session_state.get("profile_categories", [])),
+        st.session_state.get("profile_employment", "Full-time"),
+        st.session_state.get("profile_seniority", "All Levels"),
+        st.session_state.get("profile_location", "")
     )
 
-    st.subheader("How It Will Work")
+    saved_preferences = st.session_state.get("ai_match_preferences")
 
-    st.write(
-        "1. Upload your resume in My Profile."
-    )
+    if saved_preferences != current_preferences:
+        st.session_state.pop("ai_matches", None)
+        st.session_state.pop("ai_candidate_count", None)
+        st.session_state.pop("ai_match_preferences", None)
 
-    st.write(
-        "2. Select your preferred industries, "
-        "locations, and employment type."
-    )
 
-    st.write(
-        "3. Receive personalized job recommendations "
-        "ranked by relevance."
-    )
+    # Display previously saved recommendations
+    matches = st.session_state.get("ai_matches")
+    candidate_count = st.session_state.get("ai_candidate_count", 0)
 
-    st.write(
-        "4. Provide feedback to help improve "
-        "future recommendations."
-    )
+    if matches is not None:
+
+        st.caption(
+            f"{candidate_count:,} jobs matched your preferences."
+        )
+
+        if matches.empty:
+            st.info(
+                "No jobs match your current preferences. "
+                "Try broadening your selections in My Profile."
+            )
+
+        else:
+            st.subheader("Your Top Job Matches")
+
+            for rank, (_, job) in enumerate(matches.iterrows(), start=1):
+
+                with st.container(border=True):
+
+                    rank_col, logo_col, details_col = st.columns(
+                        [0.6, 1, 6],
+                        gap="medium",
+                        vertical_alignment="center"
+                    )
+
+                    with rank_col:
+                        st.markdown(f"### #{rank}")
+
+                    with logo_col:
+                        logo_url = get_company_logo(job["company"])
+
+                        if logo_url:
+                            st.image(logo_url, width=48)
+
+                    with details_col:
+                        job_title = str(job["job_title"]).strip(" *")
+
+                        st.markdown(f"**{job_title}**")
+
+                        st.caption(
+                            f"{job['company']} | {job['location']}"
+                        )
+
+                        st.markdown(
+                            f"**AI Similarity Score:** "
+                            f"{job['match_score']:.3f}"
+                        )
+
+                    description_col, apply_col = st.columns(
+                        [3, 1],
+                        vertical_alignment="center"
+                    )
+
+                    with description_col:
+                        with st.expander("View Job Description"):
+                            st.write(job["description"])
+
+                    with apply_col:
+                        if str(job["job_url"]).startswith(
+                            ("https://", "http://")
+                        ):
+                            st.link_button(
+                                "Apply",
+                                job["job_url"],
+                                type="primary"
+                            )
 
 
 # ========================================
@@ -830,23 +965,31 @@ with profile_tab:
                 st.session_state["resume_text"] = resume_text
 
                 if is_new_resume:
+                    st.session_state.pop("ai_matches", None)
+                    st.session_state.pop("ai_candidate_count", None)
                     st.rerun()
 
                 st.success("Resume uploaded and text extracted successfully.")
                 st.caption(f"Extracted {len(resume_text):,} characters.")
             else:
                 st.session_state.pop("resume_text", None)
+                st.session_state.pop("ai_matches", None)
+                st.session_state.pop("ai_candidate_count", None)
                 st.warning(
                     "We couldn't extract readable text from this resume."
                 )
 
         except Exception:
             st.session_state.pop("resume_text", None)
+            st.session_state.pop("ai_matches", None)
+            st.session_state.pop("ai_candidate_count", None)
             st.error(
                 "We couldn't read this file. Please upload a valid PDF or DOCX."
             )
     else:
         st.session_state.pop("resume_text", None)
+        st.session_state.pop("ai_matches", None)
+        st.session_state.pop("ai_candidate_count", None)
 
 
     st.divider()
@@ -920,10 +1063,15 @@ with profile_tab:
         key="profile_seniority"
     )
 
-    st.info(
-        "Profile-based recommendations are not yet "
-        "active. Your preferences will be used when "
-        "we implement the AI matching system."
+    st.write("")
+
+    st.button(
+        "Find My AI Matches →",
+        type="primary",
+        on_click=lambda: st.session_state.update(
+            {"main_tab": "AI Matches"}
+        ),
+        disabled=not bool(st.session_state.get("resume_text"))
     )
 
 
