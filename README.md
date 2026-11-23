@@ -1,7 +1,9 @@
 
 # AI Job Search Assistant
 
-**AI Essentials Final Project | Eda & Yuvraj**
+## AI Essentials Final Project | Eda & Yuvraj**
+
+https://ai-essentials-final-project-eda-yuvraj.streamlit.app/?utm_source=chatgpt.com
 
 ## Project Overview
 
@@ -59,7 +61,7 @@ Users can also specify career preferences to guide the recommendation process.
 
 The main AI component of the application is its personalized job recommendation system.
 
-Rather than relying exclusively on exact keyword matches, the application uses **semantic similarity** to compare resumes with job descriptions.
+Rather than relying exclusively on exact keyword matches, the application uses semantic similarity to compare resumes with job descriptions.
 
 Semantic similarity allows the model to recognize relationships between concepts even when the resume and job posting use different terminology.
 
@@ -93,7 +95,7 @@ Each recommendation displays:
 
 Match scores are displayed as percentages to make the recommendations easier to interpret.
 
-**Important:** These percentages represent normalized matching scores, not probabilities of receiving a job offer.
+## Important:## These percentages represent normalized matching scores, not probabilities of receiving a job offer.
 
 ### 7. User Feedback
 
@@ -110,15 +112,15 @@ This feature allows the recommendation process to reflect users' expressed inter
 
 The application is developed using Streamlit and organized into three main tabs:
 
-**Explore Jobs**
+## Explore Jobs##
 
 Browse available job opportunities, apply filters, view job descriptions, and access employer application pages.
 
-**My Profile**
+## My Profile##
 
 Upload a resume and specify career preferences.
 
-**AI Matches**
+## AI Matches##
 
 Generate personalized job recommendations, review match scores, and provide feedback.
 
@@ -126,15 +128,15 @@ Generate personalized job recommendations, review match scores, and provide feed
 
 The application follows a multi-stage workflow:
 
-**Step 1 — Data Collection**
+## Step 1 — Data Collection##
 
 Job postings are retrieved from publicly accessible employer recruitment APIs.
 
-**Step 2 — Data Processing**
+## Step 2 — Data Processing##
 
 Collected information is cleaned, standardized, and classified into relevant job categories, employment types, and seniority levels.
 
-**Step 3 — Resume Processing**
+## Step 3 — Resume Processing##
 
 An uploaded resume provides information about the candidate's background, experience, education, and skills.
 
@@ -196,7 +198,7 @@ The highest-ranked opportunities are presented through an interactive Streamlit 
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/edacogendez1/ai-essentials-final-project.git
 cd ai-essentials-final-project
 ```
 
