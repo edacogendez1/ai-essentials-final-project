@@ -182,8 +182,9 @@ def classify_job_categories(title, description=""):
             "economics"
         ],
         "Research": [
-            "research", "research assistant",
-            "research analyst"
+            "research", "researcher",
+            "research assistant", "research analyst",
+            "quantitative researcher"
         ],
          "Software Engineering": [
             "software engineer", "software developer",

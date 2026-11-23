@@ -36,7 +36,7 @@ def get_session():
 
 BASE_DIR = Path(__file__).parent
 
-MAX_JOBS_PER_COMPANY = 100
+MAX_JOBS_PER_COMPANY = 50
 
 def clean_text(raw_text):
     return BeautifulSoup(
@@ -80,7 +80,7 @@ def get_lever_jobs(company, board_id):
     batch_size = 20
     skip = 0
 
-    for page in range(5):
+    for page in range(3):
         response = get_session().get(
             url,
             params={
@@ -97,7 +97,7 @@ def get_lever_jobs(company, board_id):
         if not batch:
             break
 
-        for job in batch:
+        for job in batch[:MAX_JOBS_PER_COMPANY - len(jobs)]:
             description = job.get("descriptionPlain", "")
 
             if not description:
@@ -120,7 +120,7 @@ def get_lever_jobs(company, board_id):
                 "job_url": job.get("hostedUrl", "")
             })
 
-        if len(batch) < batch_size:
+        if len(batch) < batch_size or len(jobs) >= MAX_JOBS_PER_COMPANY:
             break
 
         skip += batch_size
@@ -162,7 +162,7 @@ def collect_all_jobs():
     ) as file:
         companies = list(csv.DictReader(file))
 
-    # Collect from 5 companies simultaneously
+    # Collect from 2 companies simultaneously
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_to_company = {
             executor.submit(collect_company_jobs, info): info["company"]

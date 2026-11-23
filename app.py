@@ -87,13 +87,25 @@ st.markdown("""
         color: #374151;
     }
 
-    /* Bordered containers and job cards */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        border-radius: 16px;
+    /* Primary buttons: white text */
+    div.stButton > button[kind="primary"],
+    div.stButton > button[kind="primary"]:hover,
+    div.stButton > button[kind="primary"]:focus {
+        color: #FFFFFF !important;
     }
 
-    div[data-testid="stVerticalBlockBorderWrapper"][data-testid] {
-        border-color: #E2E5DF;
+    div.stButton > button[kind="primary"] p,
+    div.stButton > button[kind="primary"]:hover p,
+    div.stButton > button[kind="primary"]:focus p {
+        color: #FFFFFF !important;
+    }
+    
+    /* Crisp white job cards and bordered containers */
+    div[data-testid="stVerticalBlockBorderWrapper"],
+    div[data-testid="stVerticalBlockBorderWrapper"] > div,
+    div[data-testid="stVerticalBlockBorderWrapper"] > div > div {
+        background-color: #FFFFFF !important;
+        border-radius: 16px;
     }
 
     /* Sage-green dropdown backgrounds */
@@ -302,12 +314,31 @@ COMPANY_DOMAINS = {
     "Coupang": "coupang.com",
     "SumUp": "sumup.com",
     "Langan Engineering": "langan.com",
+    "IMC Trading": "imc.com",
+    "Tanius Technology": "tanius.com",
+    "Greenland Investment Management": "greenlandim.com",
+    "DRW": "drw.com",
+    "Point72": "point72.com",
+    "Kalshi": "kalshi.com",
+    "Allegiant Air": "allegiantair.com",
 
 }
 
 
 def get_company_logo(company):
-    domain = COMPANY_DOMAINS.get(company)
+    if not company:
+        return None
+
+    company_clean = str(company).strip().lower()
+
+    domain = next(
+        (
+            domain
+            for name, domain in COMPANY_DOMAINS.items()
+            if name.strip().lower() == company_clean
+        ),
+        None
+    )
 
     if domain:
         return (
@@ -702,14 +733,13 @@ with explore_tab:
                                 st.image(logo_url, width=48)
 
                         with details_col:
-                            st.markdown(
-                                f"**{job['job_title']}**"
-                            )
+                            company_name = str(job["company"]).strip()
+                            job_title = str(job["job_title"]).strip(" *")
+                            location = str(job["location"]).strip()
 
-                            st.caption(
-                                f"{job['company']}  |  "
-                                f"{job['location']}"
-                            )
+                            st.markdown(f"### {company_name}")
+                            st.markdown(f"**{job_title}**")
+                            st.caption(f"📍 {location}")
 
                             
                             # Display employment type and seniority
@@ -813,6 +843,7 @@ with matches_tab:
                 # Use cached job classifications
                 jobs_df = classify_all_jobs(jobs_df)
 
+    
                 # Filter by career preferences
                 candidates = filter_matching_candidates(
                     jobs_df=jobs_df,
@@ -823,6 +854,7 @@ with matches_tab:
                 )
 
                 candidate_count = len(candidates)
+
 
                 # Rank remaining jobs using AI
                 matches = rank_job_matches(
@@ -902,23 +934,24 @@ with matches_tab:
                             st.image(logo_url, width=48)
 
                     with details_col:
+                        company_name = str(job["company"]).strip()
                         job_title = str(job["job_title"]).strip(" *")
+                        location = str(job["location"]).strip()
 
+                        st.markdown(f"### {company_name}")
                         st.markdown(f"**{job_title}**")
-
-                        st.caption(
-                            f"{job['company']} | {job['location']}"
-                        )
+                        st.caption(f"📍 {location}")
 
           
                     if "final_score" in job.index:
+                        match_score = max(0.0, min(1.0, float(job["final_score"])))
+                        match_percentage = match_score * 100
+
                         st.markdown(
-                            f"**Personalized Match Score:** {job['final_score']:.3f}"
+                            f"**Personalized Match Score: {match_percentage:.1f}%**"
                         )
-                        st.caption(
-                            f"Hybrid Score: {job['hybrid_score']:.3f} | "
-                            f"Feedback Adjustment: {0.10 * job['feedback_score']:+.3f}"
-                        )
+
+                        st.progress(match_score)
                     else:
                         st.markdown(
                             f"**Hybrid Match Score:** {job['hybrid_score']:.3f}"
@@ -1008,6 +1041,7 @@ with profile_tab:
                 if is_new_resume:
                     st.session_state.pop("ai_matches", None)
                     st.session_state.pop("ai_candidate_count", None)
+                    st.session_state["job_feedback"] = {}
                     st.rerun()
 
                 st.success("Resume uploaded and text extracted successfully.")
@@ -1037,10 +1071,31 @@ with profile_tab:
 
     st.subheader("Career Preferences")
 
-    
+
+
+    if "previous_industries" not in st.session_state:
+        st.session_state["previous_industries"] = ["All Industries"]
+
+    def update_industry_selection():
+        selected = st.session_state["profile_categories"]
+        previous = st.session_state["previous_industries"]
+
+        if "All Industries" in selected and len(selected) > 1:
+            if "All Industries" not in previous:
+                selected = ["All Industries"]
+            else:
+                selected = [
+                    category for category in selected
+                    if category != "All Industries"
+                ]
+
+        st.session_state["profile_categories"] = selected
+        st.session_state["previous_industries"] = selected.copy()
+
     preferred_categories = st.multiselect(
         "Preferred Job Categories",
         [
+            "All Industries",
             "Finance",
             "Accounting",
             "Investment Banking",
@@ -1066,11 +1121,12 @@ with profile_tab:
             "Design",
             "Communications & Public Relations"
         ],
+        default=["All Industries"],
         placeholder="Select your career interests",
         help="Select multiple categories to personalize your job recommendations.",
-        key="profile_categories"
+        key="profile_categories",
+        on_change=update_industry_selection
     )
-
 
 
     preferred_location = st.text_input(

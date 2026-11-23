@@ -1,5 +1,6 @@
 
 import streamlit as st
+import re
 
 
 # ----------------------------------------
@@ -27,7 +28,7 @@ from sentence_transformers import SentenceTransformer
 def load_matching_model():
     return SentenceTransformer("all-MiniLM-L6-v2")
 
-def calculate_similarity(resume_text, job_texts):
+def calculate_similarity(resume_text, job_texts, return_embeddings=False):
     model = load_matching_model()
 
     resume_embedding = model.encode(
@@ -43,7 +44,11 @@ def calculate_similarity(resume_text, job_texts):
 
     similarities = job_embeddings @ resume_embedding
 
+    if return_embeddings:
+        return similarities, job_embeddings
+
     return similarities
+
 
 def filter_matching_candidates(
     jobs_df,
@@ -54,8 +59,8 @@ def filter_matching_candidates(
 ):
     candidates = jobs_df.copy()
 
-    # Filter by preferred job categories
-    if preferred_categories:
+    # Filter by job category only when specific categories are selected
+    if preferred_categories and "All Industries" not in preferred_categories:
         candidates = candidates[
             candidates["job_categories"].apply(
                 lambda categories: any(
@@ -149,6 +154,81 @@ def calculate_skills_overlap(resume_text, job_text):
     return len(matching_skills) / len(resume_skills)
 
 
+# ----------------------------------------
+# EDUCATION ELIGIBILITY
+# ----------------------------------------
+
+def detect_required_degree(job_title):
+    """Detect the minimum degree level mentioned in the job title."""
+    title = str(job_title).lower()
+
+    # PhD = Level 3
+    if re.search(r"\bph\.?d\.?\b|\bdoctorate\b", title):
+        return 3
+
+    # BS/MS or BA/MA = Level 1 (either degree accepted)
+    if re.search(
+        r"\bb\.?[sa]\.?\s*/\s*m\.?[sa]\.?\b",
+        title
+    ):
+        return 1
+
+    # Master's = Level 2
+    if re.search(
+        r"\bm\.?[sa]\.?\b|\bmaster'?s?\b",
+        title
+    ):
+        return 2
+
+    # Bachelor's = Level 1
+    if re.search(
+        r"\bb\.?[sa]\.?\b|\bbachelor'?s?\b",
+        title
+    ):
+        return 1
+
+    return None
+
+
+def detect_candidate_degree(resume_text):
+    """Detect the highest degree level mentioned in the resume."""
+    resume = str(resume_text).lower()
+
+    if re.search(r"\bph\.?d\.?\b|\bdoctorate\b", resume):
+        return 3
+
+    if re.search(r"\bm\.?[sa]\.?\b|\bmaster'?s?\b", resume):
+        return 2
+
+    if re.search(r"\bb\.?[sa]\.?\b|\bbachelor'?s?\b", resume):
+        return 1
+
+    return None
+
+
+
+def calculate_eligibility_penalty(resume_text, job_title):
+    """
+    Apply a penalty when the job title explicitly
+    requests a higher degree than the candidate has.
+    """
+    required_degree = detect_required_degree(job_title)
+    candidate_degree = detect_candidate_degree(resume_text)
+
+    # No penalty when the title has no explicit degree requirement
+    if required_degree is None:
+        return 0.0
+
+    # Avoid penalizing when the resume's degree is unclear
+    if candidate_degree is None:
+        return 0.0
+
+    if candidate_degree < required_degree:
+        return 0.15
+
+    return 0.0
+
+
 def rank_job_matches(resume_text, candidates, top_n=10, feedback=None):
 
     if candidates.empty:
@@ -163,10 +243,12 @@ def rank_job_matches(resume_text, candidates, top_n=10, feedback=None):
     ]
 
     # Calculate semantic similarity
-    scores = calculate_similarity(
-        resume_text,
-        job_texts
-    )
+    scores, job_embeddings = calculate_similarity(
+    resume_text,
+    job_texts,
+    return_embeddings=True
+)
+
 
     # Add similarity scores to the job data
     candidates["match_score"] = scores
@@ -206,13 +288,6 @@ def rank_job_matches(resume_text, candidates, top_n=10, feedback=None):
     candidates["feedback_score"] = 0.0
 
     if (candidates["feedback_rating"] != 0).any():
-        model = load_matching_model()
-
-        job_embeddings = model.encode(
-            job_texts,
-            batch_size=32,
-            normalize_embeddings=True
-        )
 
         ratings = candidates["feedback_rating"].to_numpy()
         rated_embeddings = job_embeddings[ratings != 0]
@@ -223,14 +298,20 @@ def rank_job_matches(resume_text, candidates, top_n=10, feedback=None):
         ) @ rated_values / len(rated_values)
 
         candidates["feedback_score"] = feedback_scores
-    
-    # Adjust hybrid scores based on student feedback
+
+   
+    # Calculate education eligibility using job titles only
+    candidates["eligibility_penalty"] = [
+        calculate_eligibility_penalty(resume_text, title)
+        for title in candidates["job_title"]
+    ]
+
+    # Adjust scores based on feedback and education eligibility
     candidates["final_score"] = (
         candidates["hybrid_score"]
         + 0.10 * candidates["feedback_score"]
-)
-
-
+        - candidates["eligibility_penalty"]
+    )
 
     # Rank from highest to lowest
     candidates = candidates.sort_values(
