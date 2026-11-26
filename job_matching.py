@@ -1,6 +1,10 @@
 
-import streamlit as st
+from collections import OrderedDict
 import re
+from threading import Lock
+
+import numpy as np
+import streamlit as st
 
 
 # ----------------------------------------
@@ -28,6 +32,42 @@ from sentence_transformers import SentenceTransformer
 def load_matching_model():
     return SentenceTransformer("all-MiniLM-L6-v2")
 
+
+@st.cache_resource(show_spinner=False)
+def job_embedding_cache():
+    # Cache public posting text only. Resume embeddings stay local to the request.
+    return OrderedDict(), Lock()
+
+
+def encode_job_texts(model, job_texts):
+    cache, lock = job_embedding_cache()
+    unique_texts = dict.fromkeys(job_texts)
+    embeddings = {}
+    with lock:
+        for job_text in unique_texts:
+            if job_text in cache:
+                cache.move_to_end(job_text)
+                embeddings[job_text] = cache[job_text]
+
+    missing_texts = [job_text for job_text in unique_texts if job_text not in embeddings]
+    if missing_texts:
+        new_embeddings = model.encode(
+            missing_texts,
+            batch_size=32,
+            normalize_embeddings=True
+        )
+        with lock:
+            for job_text, embedding in zip(missing_texts, new_embeddings):
+                # Keep a standalone vector so evicting a row can free its memory.
+                vector = embedding.copy()
+                embeddings[job_text] = cache[job_text] = vector
+                cache.move_to_end(job_text)
+            while len(cache) > 20_000:
+                cache.popitem(last=False)
+
+    return np.stack([embeddings[job_text] for job_text in job_texts])
+
+
 def calculate_similarity(resume_text, job_texts, return_embeddings=False):
     model = load_matching_model()
 
@@ -36,10 +76,8 @@ def calculate_similarity(resume_text, job_texts, return_embeddings=False):
         normalize_embeddings=True
     )
 
-    job_embeddings = model.encode(
-        job_texts,
-        batch_size=32,
-        normalize_embeddings=True
+    job_embeddings = encode_job_texts(model, job_texts) if len(job_texts) else np.empty(
+        (0, len(resume_embedding)), dtype=resume_embedding.dtype
     )
 
     similarities = job_embeddings @ resume_embedding
@@ -144,14 +182,13 @@ def extract_skills(text):
 
 def calculate_skills_overlap(resume_text, job_text):
     resume_skills = extract_skills(resume_text)
-    job_skills = extract_skills(job_text)
+    return score_skills_overlap(resume_skills, job_text)
 
-    if not resume_skills:
-        return 0.0
 
-    matching_skills = resume_skills.intersection(job_skills)
-
-    return len(matching_skills) / len(resume_skills)
+def score_skills_overlap(resume_skills, job_text):
+    if resume_skills:
+        return len(resume_skills.intersection(extract_skills(job_text))) / len(resume_skills)
+    return 0.0
 
 
 # ----------------------------------------
@@ -212,18 +249,15 @@ def calculate_eligibility_penalty(resume_text, job_title):
     Apply a penalty when the job title explicitly
     requests a higher degree than the candidate has.
     """
-    required_degree = detect_required_degree(job_title)
-    candidate_degree = detect_candidate_degree(resume_text)
+    return score_eligibility_penalty(detect_candidate_degree(resume_text), job_title)
 
-    # No penalty when the title has no explicit degree requirement
-    if required_degree is None:
-        return 0.0
 
-    # Avoid penalizing when the resume's degree is unclear
+def score_eligibility_penalty(candidate_degree, job_title):
     if candidate_degree is None:
         return 0.0
 
-    if candidate_degree < required_degree:
+    required_degree = detect_required_degree(job_title)
+    if required_degree is not None and candidate_degree < required_degree:
         return 0.15
 
     return 0.0
@@ -238,28 +272,21 @@ def rank_job_matches(resume_text, candidates, top_n=10, feedback=None):
     candidates = candidates.copy()
     # Prepare text for each job
     job_texts = [
-        prepare_job_text(job)
-        for _, job in candidates.iterrows()
+        prepare_job_text({"job_title": title, "description": description})
+        for title, description in zip(candidates["job_title"], candidates["description"])
     ]
 
     # Calculate semantic similarity
-    scores, job_embeddings = calculate_similarity(
-    resume_text,
-    job_texts,
-    return_embeddings=True
-)
-
+    scores, job_embeddings = calculate_similarity(resume_text, job_texts, return_embeddings=True)
 
     # Add similarity scores to the job data
     candidates["match_score"] = scores
 
     # Match skills using the full job description
+    resume_skills = extract_skills(resume_text)
     candidates["skills_score"] = [
-        calculate_skills_overlap(
-            resume_text,
-            str(job["description"])
-        )
-        for _, job in candidates.iterrows()
+        score_skills_overlap(resume_skills, description)
+        for description in candidates["description"]
     ]
 
     # Combine semantic similarity and skills overlap
@@ -301,8 +328,9 @@ def rank_job_matches(resume_text, candidates, top_n=10, feedback=None):
 
    
     # Calculate education eligibility using job titles only
+    candidate_degree = detect_candidate_degree(resume_text)
     candidates["eligibility_penalty"] = [
-        calculate_eligibility_penalty(resume_text, title)
+        score_eligibility_penalty(candidate_degree, title)
         for title in candidates["job_title"]
     ]
 
