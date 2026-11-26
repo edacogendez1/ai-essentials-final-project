@@ -3,6 +3,7 @@ from collections import OrderedDict
 from functools import lru_cache
 import re
 from threading import Lock, Thread
+import time
 
 import numpy as np
 import streamlit as st
@@ -40,76 +41,33 @@ def job_embedding_cache():
     return OrderedDict(), Lock()
 
 
+# Background warmup embeds jobs in small chunks so a user's click only
+# ever waits for the chunk in progress, never for the whole job list.
+WARMUP_CHUNK_SIZE = 128
+
+
 @st.cache_resource(show_spinner=False)
 def job_embedding_warmup_state():
-    return {"thread": None}
+    return {
+        "thread": None,
+        # Only one model.encode runs at a time so work isn't split across CPUs
+        "encode_lock": Lock(),
+        # Number of user requests waiting; the warmup pauses while > 0
+        "user_requests": 0,
+        "state_lock": Lock(),
+    }
 
 
-def _encode_missing(model, cache, lock, job_texts):
-    with lock:
-        missing_texts = [text for text in dict.fromkeys(job_texts) if text not in cache]
-    if not missing_texts:
-        return
-    new_embeddings = model.encode(missing_texts, batch_size=32, normalize_embeddings=True)
-    with lock:
-        for job_text, embedding in zip(missing_texts, new_embeddings):
-            cache[job_text] = embedding.copy()
-            cache.move_to_end(job_text)
-        while len(cache) > 20_000:
-            cache.popitem(last=False)
-
-
-def warm_job_embeddings(jobs_df):
-    """
-    Start embedding every loaded job in a background thread so the
-    first "Find My Matches" click doesn't have to wait for it.
-    """
-    if jobs_df.empty:
-        return
-
-    # Resolve cached resources on the script thread (they need its context)
-    model = load_matching_model()
-    cache, lock = job_embedding_cache()
-    state = job_embedding_warmup_state()
-
-    job_texts = [
-        prepare_job_text({"job_title": title, "description": description})
-        for title, description in zip(jobs_df["job_title"], jobs_df["description"])
-    ]
-
-    with lock:
-        thread = state["thread"]
-        if thread is not None and thread.is_alive():
-            return
-        if all(text in cache for text in job_texts):
-            return
-        thread = Thread(
-            target=_encode_missing,
-            args=(model, cache, lock, job_texts),
-            daemon=True
-        )
-        state["thread"] = thread
-    thread.start()
-
-
-def encode_job_texts(model, job_texts):
-    cache, lock = job_embedding_cache()
-
-    # If a background warmup is running, wait for it rather than
-    # encoding the same postings twice.
-    thread = job_embedding_warmup_state()["thread"]
-    if thread is not None and thread.is_alive():
-        thread.join()
-
-    unique_texts = dict.fromkeys(job_texts)
+def _encode_and_store(model, cache, lock, job_texts):
+    """Return {text: embedding}, encoding only texts not already cached."""
     embeddings = {}
     with lock:
-        for job_text in unique_texts:
+        for job_text in dict.fromkeys(job_texts):
             if job_text in cache:
                 cache.move_to_end(job_text)
                 embeddings[job_text] = cache[job_text]
 
-    missing_texts = [job_text for job_text in unique_texts if job_text not in embeddings]
+    missing_texts = [text for text in dict.fromkeys(job_texts) if text not in embeddings]
     if missing_texts:
         new_embeddings = model.encode(
             missing_texts,
@@ -124,6 +82,66 @@ def encode_job_texts(model, job_texts):
                 cache.move_to_end(job_text)
             while len(cache) > 20_000:
                 cache.popitem(last=False)
+
+    return embeddings
+
+
+def _warm_in_background(model, cache, lock, state, job_texts):
+    for start in range(0, len(job_texts), WARMUP_CHUNK_SIZE):
+        # Give way to users who are waiting for their matches
+        while state["user_requests"] > 0:
+            time.sleep(0.05)
+        with state["encode_lock"]:
+            _encode_and_store(model, cache, lock, job_texts[start:start + WARMUP_CHUNK_SIZE])
+
+
+def warm_job_embeddings(jobs_df):
+    """
+    Start embedding every loaded job in a background thread so the
+    first "Find My Matches" click usually finds them ready.
+    """
+    if jobs_df.empty:
+        return
+
+    # Resolve cached resources on the script thread (they need its context)
+    model = load_matching_model()
+    cache, lock = job_embedding_cache()
+    state = job_embedding_warmup_state()
+
+    job_texts = list(dict.fromkeys(
+        prepare_job_text({"job_title": title, "description": description})
+        for title, description in zip(jobs_df["job_title"], jobs_df["description"])
+    ))
+
+    with lock:
+        thread = state["thread"]
+        if thread is not None and thread.is_alive():
+            return
+        if all(text in cache for text in job_texts):
+            return
+        thread = Thread(
+            target=_warm_in_background,
+            args=(model, cache, lock, state, job_texts),
+            daemon=True
+        )
+        state["thread"] = thread
+    thread.start()
+
+
+def encode_job_texts(model, job_texts):
+    cache, lock = job_embedding_cache()
+    state = job_embedding_warmup_state()
+
+    # Jump ahead of the background warmup: it pauses after its current
+    # chunk, and we encode only the jobs this request actually needs.
+    with state["state_lock"]:
+        state["user_requests"] += 1
+    try:
+        with state["encode_lock"]:
+            embeddings = _encode_and_store(model, cache, lock, job_texts)
+    finally:
+        with state["state_lock"]:
+            state["user_requests"] -= 1
 
     return np.stack([embeddings[job_text] for job_text in job_texts])
 
