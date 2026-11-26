@@ -1,4 +1,7 @@
 
+import html
+import re
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone
@@ -324,15 +327,75 @@ COMPANY_DOMAINS = {
     "SentinelOne": "sentinelone.com",
     "Coupang": "coupang.com",
     "SumUp": "sumup.com",
-    "Langan Engineering": "langan.com",
     "IMC Trading": "imc.com",
     "Tanius Technology": "tanius.com",
     "Greenland Investment Management": "greenlandim.com",
     "DRW": "drw.com",
     "Point72": "point72.com",
     "Kalshi": "kalshi.com",
-    "Allegiant Air": "allegiantair.com",
 
+    # Trading, Investment, Consulting, Healthcare & Industrial
+    "Belvedere Trading": "belvederetrading.com",
+    "Maven Securities": "mavensecurities.com",
+    "WorldQuant": "worldquant.com",
+    "Man Group": "man.com",
+    "Bridgewater Associates": "bridgewater.com",
+    "Bridgewater - Campus Recruiting": "bridgewater.com",
+    "Databento": "databento.com",
+    "Gauntlet": "gauntlet.xyz",
+    "Chicago Trading Company": "chicagotrading.com",
+    "MA Capital": "macapital.com",
+    "Optiver - ICML": "optiver.com",
+    "Engineers Gate": "www.engineersgate.com",
+    "XTX Markets": "xtxmarkets.com",
+    "Capstone Investment": "capstoneco.com",
+    "GCM Grosvenor": "gcmgrosvenor.com",
+    "Pzena Investment Management": "pzena.com",
+    "Weiss Asset Management": "weissasset.com",
+    "Pantheon Ventures": "pantheon.com",
+    "DigitalBridge": "digitalbridge.com",
+    "Northmarq": "northmarq.com",
+    "Faropoint": "faropoint.com",
+    "Bertram Capital": "bertramcapital.com",
+    "Galvanize": "galvanize.com",
+    "Focus Financial Partners": "focusfinancialpartners.com",
+    "Monticello Asset Management": "monticelloam.com",
+    "The Brattle Group": "brattle.com",
+    "BGBx Consulting": "bgbx.com",
+    "AMEND Consulting": "amendllc.com",
+    "Integra FEC": "integrafec.com",
+    "Trace3": "trace3.com",
+    "Interbrand": "interbrand.com",
+    "Biohub": "czbiohub.org",
+    "Adams Clinical": "adamsclinical.com",
+    "Precision for Medicine": "precisionformedicine.com",
+    "Science 37": "science37.com",
+    "Care Access": "careaccess.com",
+    "CareDx": "caredx.com",
+    "Iterative Health": "iterative.health",
+    "Beam Therapeutics": "beamtx.com",
+    "Alamar Biosciences": "alamarbio.com",
+    "Legend Biotech": "legendbiotech.com",
+    "ClinChoice": "clinchoice.com",
+    "Headlands Research": "headlandsresearch.com",
+    "Axle Research": "axleinfo.com",
+    "Kiniksa Pharmaceuticals": "kiniksa.com",
+    "PointClickCare": "pointclickcare.com",
+    "Avalere Health": "avalerehealth.com",
+    "Becker Friedman Institute PREP": "bfi.uchicago.edu",
+    "Blue Rose Research": "blueroseresearch.org",
+    "Social Finance": "socialfinance.org",
+    "84.51 Degrees": "8451.com",
+    "dunnhumby": "dunnhumby.com",
+    "Hasbro": "hasbro.com",
+    "AlphaSense": "alpha-sense.com",
+    "Gotion": "gotion.com",
+    "LG Energy Solution Arizona": "lgensol.com",
+    "ON.energy": "on.energy",
+    "Panthalassa": "panthalassa.com",
+    "Iovance Biotherapeutics": "iovance.com",
+    "Advanced Technology Services": "advancedtech.com",
+    "Industrial Electric Manufacturing": "iemfg.com",
 }
 
 
@@ -358,6 +421,33 @@ def get_company_logo(company):
         )
 
     return None
+
+
+def render_company_logo(company):
+    """Show the company logo, or an initials badge when none exists."""
+    logo_url = get_company_logo(company)
+
+    if logo_url:
+        st.image(logo_url, width=48)
+        return
+
+    words = [
+        word for word in re.split(r"[\s\-]+", str(company).strip())
+        if word and word[0].isalnum()
+    ]
+    initials = html.escape("".join(word[0] for word in words[:2]).upper() or "?")
+
+    st.markdown(
+        f"""
+        <div style="width:48px;height:48px;border-radius:10px;
+                    background-color:#EAF1E9;color:#47745E;
+                    display:flex;align-items:center;justify-content:center;
+                    font-weight:700;font-size:18px;">
+            {initials}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 # ----------------------------------------
@@ -739,12 +829,7 @@ with explore_tab:
                         )
 
                         with logo_col:
-                            logo_url = get_company_logo(
-                                job["company"]
-                            )
-
-                            if logo_url:
-                                st.image(logo_url, width=48)
+                            render_company_logo(job["company"])
 
                         with details_col:
                             company_name = str(job["company"]).strip()
@@ -942,10 +1027,7 @@ with matches_tab:
                         st.markdown(f"### #{rank}")
 
                     with logo_col:
-                        logo_url = get_company_logo(job["company"])
-
-                        if logo_url:
-                            st.image(logo_url, width=48)
+                        render_company_logo(job["company"])
 
                     with details_col:
                         company_name = str(job["company"]).strip()
