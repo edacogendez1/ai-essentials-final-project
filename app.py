@@ -13,7 +13,8 @@ from classify_jobs import (
 
 from job_matching import (
     filter_matching_candidates,
-    rank_job_matches
+    rank_job_matches,
+    warm_job_embeddings
 )
 
 from io import BytesIO
@@ -458,6 +459,9 @@ with explore_tab:
         
         else:
             jobs_df = classify_all_jobs(jobs_df)
+
+            # Pre-compute AI match embeddings in the background
+            warm_job_embeddings(jobs_df)
 
             st.caption(
                 f"{len(jobs_df):,} available jobs across "

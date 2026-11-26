@@ -1,7 +1,8 @@
 
 from collections import OrderedDict
+from functools import lru_cache
 import re
-from threading import Lock
+from threading import Lock, Thread
 
 import numpy as np
 import streamlit as st
@@ -39,8 +40,67 @@ def job_embedding_cache():
     return OrderedDict(), Lock()
 
 
+@st.cache_resource(show_spinner=False)
+def job_embedding_warmup_state():
+    return {"thread": None}
+
+
+def _encode_missing(model, cache, lock, job_texts):
+    with lock:
+        missing_texts = [text for text in dict.fromkeys(job_texts) if text not in cache]
+    if not missing_texts:
+        return
+    new_embeddings = model.encode(missing_texts, batch_size=32, normalize_embeddings=True)
+    with lock:
+        for job_text, embedding in zip(missing_texts, new_embeddings):
+            cache[job_text] = embedding.copy()
+            cache.move_to_end(job_text)
+        while len(cache) > 20_000:
+            cache.popitem(last=False)
+
+
+def warm_job_embeddings(jobs_df):
+    """
+    Start embedding every loaded job in a background thread so the
+    first "Find My Matches" click doesn't have to wait for it.
+    """
+    if jobs_df.empty:
+        return
+
+    # Resolve cached resources on the script thread (they need its context)
+    model = load_matching_model()
+    cache, lock = job_embedding_cache()
+    state = job_embedding_warmup_state()
+
+    job_texts = [
+        prepare_job_text({"job_title": title, "description": description})
+        for title, description in zip(jobs_df["job_title"], jobs_df["description"])
+    ]
+
+    with lock:
+        thread = state["thread"]
+        if thread is not None and thread.is_alive():
+            return
+        if all(text in cache for text in job_texts):
+            return
+        thread = Thread(
+            target=_encode_missing,
+            args=(model, cache, lock, job_texts),
+            daemon=True
+        )
+        state["thread"] = thread
+    thread.start()
+
+
 def encode_job_texts(model, job_texts):
     cache, lock = job_embedding_cache()
+
+    # If a background warmup is running, wait for it rather than
+    # encoding the same postings twice.
+    thread = job_embedding_warmup_state()["thread"]
+    if thread is not None and thread.is_alive():
+        thread.join()
+
     unique_texts = dict.fromkeys(job_texts)
     embeddings = {}
     with lock:
@@ -161,24 +221,38 @@ SKILL_SYNONYMS = {
     "financial planning and analysis": "financial planning and analysis"
 }
 
-def extract_skills(text):
-    import re
+# Precompile skill patterns once instead of rebuilding them per job
+SKILL_PATTERNS = [
+    (
+        skill,
+        re.compile(
+            r"\br\b(?!\s*&\s*d)" if skill == "r"
+            else r"\b" + re.escape(skill) + r"\b"
+        ),
+        SKILL_SYNONYMS.get(skill, skill)
+    )
+    for skill in SKILL_KEYWORDS
+]
 
+
+def extract_skills(text):
     text = str(text).lower()
 
     found_skills = set()
 
-    for skill in SKILL_KEYWORDS:
-        if skill == "r":
-            pattern = r"\br\b(?!\s*&\s*d)"
-        else:
-            pattern = r"\b" + re.escape(skill) + r"\b"
-
-        if re.search(pattern, text):
-            canonical_skill = SKILL_SYNONYMS.get(skill, skill)
+    for skill, pattern, canonical_skill in SKILL_PATTERNS:
+        # A plain substring check is far faster than a regex starting
+        # with \b, so only run the regex when the keyword appears at all.
+        if skill in text and pattern.search(text):
             found_skills.add(canonical_skill)
 
     return found_skills
+
+
+@lru_cache(maxsize=20_000)
+def extract_job_skills(job_text):
+    # Cache public posting text only; resumes are never cached.
+    return frozenset(extract_skills(job_text))
 
 def calculate_skills_overlap(resume_text, job_text):
     resume_skills = extract_skills(resume_text)
@@ -187,7 +261,7 @@ def calculate_skills_overlap(resume_text, job_text):
 
 def score_skills_overlap(resume_skills, job_text):
     if resume_skills:
-        return len(resume_skills.intersection(extract_skills(job_text))) / len(resume_skills)
+        return len(resume_skills.intersection(extract_job_skills(str(job_text)))) / len(resume_skills)
     return 0.0
 
 
