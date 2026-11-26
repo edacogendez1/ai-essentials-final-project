@@ -100,10 +100,20 @@ st.markdown("""
         color: #FFFFFF !important;
     }
     
-    /* Crisp white job cards and bordered containers */
+    /* Bordered containers */
     div[data-testid="stVerticalBlockBorderWrapper"],
     div[data-testid="stVerticalBlockBorderWrapper"] > div,
     div[data-testid="stVerticalBlockBorderWrapper"] > div > div {
+        background-color: #FFFFFF !important;
+        border-radius: 16px;
+    }
+
+    /* Job listing and recommendation cards */
+    div[class*="st-key-job-card-"],
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(> div[class*="st-key-job-card-"]),
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(> div[class*="st-key-job-card-"]) > div > div,
+    div[data-testid="stVerticalBlockBorderWrapper"][class*="st-key-job-card-"] > div,
+    div[data-testid="stVerticalBlockBorderWrapper"][class*="st-key-job-card-"] > div > div {
         background-color: #FFFFFF !important;
         border-radius: 16px;
     }
@@ -714,9 +724,9 @@ with explore_tab:
 
 
                 # Compact job cards
-                for _, job in page_jobs.iterrows():
+                for position, (_, job) in enumerate(page_jobs.iterrows(), start=start_index):
 
-                    with st.container(border=True):
+                    with st.container(border=True, key=f"job-card-listing-{position}"):
 
                         logo_col, details_col = st.columns(
                             [1, 6],
@@ -916,7 +926,7 @@ with matches_tab:
 
             for rank, (_, job) in enumerate(matches.iterrows(), start=1):
 
-                with st.container(border=True):
+                with st.container(border=True, key=f"job-card-match-{rank}"):
 
                     rank_col, logo_col, details_col = st.columns(
                         [0.6, 1, 6],
